@@ -1,0 +1,210 @@
+---
+title: "Case Study - Bike Share"
+author: "Tim Rades"
+date: "03/17/2022"
+---
+
+#######################
+## Call in libraries ##
+#######################
+
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(dplyr)
+library(math)
+
+
+############################
+##  Read in monthly data  ##
+############################
+
+
+trips_2021_01 <- read.csv("R/case_study_csv/202101-divvy-tripdata.csv")
+trips_2021_02 <- read.csv("R/case_study_csv/202102-divvy-tripdata.csv")
+trips_2021_03 <- read.csv("R/case_study_csv/202103-divvy-tripdata.csv")
+trips_2021_04 <- read.csv("R/case_study_csv/202104-divvy-tripdata.csv")
+trips_2021_05 <- read.csv("R/case_study_csv/202105-divvy-tripdata.csv")
+trips_2021_06 <- read.csv("R/case_study_csv/202106-divvy-tripdata.csv")
+trips_2021_07 <- read.csv("R/case_study_csv/202107-divvy-tripdata.csv")
+trips_2021_08 <- read.csv("R/case_study_csv/202108-divvy-tripdata.csv")
+trips_2021_09 <- read.csv("R/case_study_csv/202109-divvy-tripdata.csv")
+trips_2021_10 <- read.csv("R/case_study_csv/202110-divvy-tripdata.csv")
+trips_2021_11 <- read.csv("R/case_study_csv/202111-divvy-tripdata.csv")
+trips_2021_12 <- read.csv("R/case_study_csv/202112-divvy-tripdata.csv")
+
+
+## Verify that the names of the columns match. Names match if returns all TRUE
+
+colnames(trips_2021_01) ==
+colnames(trips_2021_02) ==
+colnames(trips_2021_03) ==
+colnames(trips_2021_04) ==
+colnames(trips_2021_05) ==
+colnames(trips_2021_06) ==
+colnames(trips_2021_07) ==
+colnames(trips_2021_08) ==
+colnames(trips_2021_09) ==
+colnames(trips_2021_10) ==
+colnames(trips_2021_11) ==
+colnames(trips_2021_12)
+
+## Look at the structure of data to see if it is consistent
+
+str(trips_2021_01)
+str(trips_2021_02)
+str(trips_2021_03)
+str(trips_2021_04)
+str(trips_2021_05)
+str(trips_2021_06)
+str(trips_2021_07)
+str(trips_2021_08)
+str(trips_2021_09)
+str(trips_2021_10)
+str(trips_2021_11)
+str(trips_2021_12)
+
+## Note that not every ride has an associated start/end station. These may be bikes picked up at random locations where they were left by the previous user
+
+## Compare the column data types to be sure they are consistent
+
+compare_df_cols(trips_2021_01,
+	trips_2021_02,
+	trips_2021_03,
+	trips_2021_04,
+	trips_2021_05,
+	trips_2021_06,
+	trips_2021_07,
+	trips_2021_08,
+	trips_2021_09,
+	trips_2021_10,
+	trips_2021_11,
+	trips_2021_12
+	)
+
+##################################################
+## Combine the monthly data into one data frame ##
+##################################################
+
+trips_2021 <- bind_rows(trips_2021_01,
+	trips_2021_02,
+	trips_2021_03,
+	trips_2021_04,
+	trips_2021_05,
+	trips_2021_06,
+	trips_2021_07,
+	trips_2021_08,
+	trips_2021_09,
+	trips_2021_10,
+	trips_2021_11,
+	trips_2021_12
+	)
+
+
+##########################
+## Clean up the dataset ##
+##########################
+
+# Convert dates from characters to timestamps
+
+trips_2021$started_at <- strptime(trips_2021$started_at, format = "%Y-%m-%d %H:%M:%S")
+trips_2021$ended_at <- strptime(trips_2021$ended_at, format = "%Y-%m-%d %H:%M:%S")
+
+# Add a column for trip duration
+
+trips_2021$ride_duration <- as.numeric(trips_2021$ended_at - trips_2021$started_at)
+
+# Drop rides with a duration of less than 1 sec
+
+trips_2021 <- filter(trips_2021, ride_duration > 0)
+
+# Add column for approximate distance between start and end lat/lng
+
+trips_2021$ride_displacement <- sqrt((trips_2021$start_lat - trips_2021$end_lat)^2+(trips_2021$start_lng-trips_2021$end_lng)^2)*54
+
+# Add a column for boolean is_casual
+
+trips_2021$is_casual <- ifelse(trips_2021$member_casual == "casual", 1, 0)
+
+# Add a column for boolean is_weekend
+
+trips_2021$is_weekend <- ifelse(wday(trips_2021$started_at) %in% c(1,7), 1, 0)
+
+# Add column for log of ride duration
+
+trips_2021$log_ride_duration = log(as.numeric(trips_2021$ride_duration), 10)
+
+#######################
+## Analyze the data  ##
+#######################
+
+### Ride duration
+
+## Weekend Trips
+
+weekend_trips <- filter(trips_2021, is_weekend == 1)
+casual_weekend <- filter(weekend_trips, is_casual == 1)
+member_weekend <- filter(weekend_trips, is_casual == 0)
+
+t.test(casual_weekend$ride_duration, member_weekend$ride_duration)
+
+## Weekday trips
+
+weekday_trips <- filter(trips_2021, is_weekend == 0)
+casual_weekday <- filter(weekday_trips, is_casual == 1)
+member_weekday <- filter(weekday_trips, is_casual == 0)
+
+t.test(casual_weekday$ride_duration, member_weekday$ride_duration)
+
+
+
+### Popular stations
+
+## Filter for only rides that have stations
+trips_2021_has_start_station <- subset(trips_2021, trips_2021$start_station_name != '')
+trips_2021_has_end_station <- subset(trips_2021, trips_2021$end_station_name != '')
+
+
+## Find the "N" most popular start/end stations overall (by number of rides)
+N <- 15
+
+popular_start_stations <- slice(trips_2021_has_start_station %>% count(start_station_name, sort = TRUE), 1:15)
+popular_end_stations <- slice(trips_2021_has_end_station %>% count(end_station_name, sort = TRUE), 1:15)
+
+View(popular_start_stations)
+View(popular_end_stations)
+
+# Filter rows for only those starting/ending at popular stations
+rides_from_popular_stations <- subset(trips_2021, trips_2021$start_station_name %in% popular_start_stations$start_station_name)
+rides_to_popular_stations <- subset(trips_2021, trips_2021$end_station_name %in% popular_end_stations$end_station_name)
+
+########
+## Count the total casual and member rides for each of the popular start/end stations
+#
+#write.csv(rename(count(rides_from_popular_stations, start_station_name, member_casual), total = n), "count_pop_start.csv")
+#write.csv(rename(count(rides_to_popular_stations, end_station_name, member_casual), total = n), "count_pop_end.csv")
+########
+
+## Find the "N" most popular stations start/end for casual/members separately
+
+pop_casual_start_stations <- slice(count(filter(trips_2021_has_start_station, member_casual == "casual"), start_station_name, sort = TRUE), 1:N)
+pop_casual_end_stations <- slice(count(filter(trips_2021_has_end_station, member_casual == "casual"), end_station_name, sort = TRUE), 1:N)
+pop_member_start_stations <- slice(count(filter(trips_2021_has_start_station, member_casual == "member"), start_station_name, sort = TRUE), 1:N)
+pop_member_end_stations <- slice(count(filter(trips_2021_has_end_station, member_casual == "member"), end_station_name, sort = TRUE), 1:N)
+
+View(pop_casual_start_stations)
+View(pop_casual_end_stations)
+View(pop_member_start_stations)
+View(pop_member_end_stations)
+
+write.csv(pop_casual_start_stations, "pcss.csv")
+write.csv(pop_casual_end_stations, "pces.csv")
+write.csv(pop_member_start_stations, "pmss.csv")
+write.csv(pop_member_end_stations, "pmes.csv")
+
+
+########################################
+## Export a clean dataset for Tableau ##
+########################################
+
+write.csv(trips_2021, "trips_2021_V2.csv")
